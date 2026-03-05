@@ -50,7 +50,7 @@ func NewPrivateKeyFromSeed(seed []byte) (PrivateKey, error) {
 	}, nil
 }
 
-func (p *PrivateKey) String() string {
+func (p PrivateKey) String() string {
 	return hex.EncodeToString(p.key)
 }
 
@@ -82,7 +82,7 @@ func (p *PublicKey) Address() Address {
 	}
 }
 
-func (p *PublicKey) String() string {
+func (p PublicKey) String() string {
 	return hex.EncodeToString(p.key)
 }
 
@@ -106,7 +106,7 @@ type Address struct {
 	value []byte
 }
 
-func (a *Address) String() string {
+func (a Address) String() string {
 	return hex.EncodeToString(a.value)
 }
 
