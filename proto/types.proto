@@ -2,6 +2,18 @@ syntax = "proto3";
 
 option go_package = "github.com/ignoxx/blocker/proto";
 
+import "google/protobuf/empty.proto";
+
+service Node {
+  rpc Handshake(Version) returns (Version);
+  rpc HandleTransaction(Transaction) returns (google.protobuf.Empty);
+}
+
+message Version {
+  string version = 1;
+  int32 height = 2;
+}
+
 message Block {
   Header header = 1;
   repeated Transaction transactions = 2;
