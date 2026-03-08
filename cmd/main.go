@@ -3,8 +3,6 @@ package main
 import (
 	"context"
 	"log"
-	"log/slog"
-	"net"
 	"time"
 
 	"github.com/ignoxx/blocker/node"
@@ -18,22 +16,26 @@ const (
 )
 
 func main() {
-	node := node.New()
-
-	grpcServer := grpc.NewServer()
-	ln, err := net.Listen("tcp", lnAddr)
-	if err != nil {
-		log.Fatal(err)
-	}
-	proto.RegisterNodeServer(grpcServer, node)
-	slog.Info("Starting gRPC server", "address", lnAddr)
+	makeNode(lnAddr)
+	makeNode(":4000", lnAddr)
 
 	go func() {
 		time.Sleep(2 * time.Second)
 		makeTransaction()
 	}()
 
-	grpcServer.Serve(ln)
+	select{}
+}
+
+func makeNode(lnAddr string, bootstrapNodes ...string) *node.Node {
+	n := node.New()
+	go n.Start(lnAddr)
+	if len(bootstrapNodes) > 0 {
+		if err := n.BootstrapNetwork(bootstrapNodes); err != nil {
+			log.Fatal(err)
+		}
+	}
+	return n
 }
 
 func makeTransaction() {
@@ -46,8 +48,9 @@ func makeTransaction() {
 	_, err = c.Handshake(
 		context.TODO(),
 		&proto.Version{
-			Version: "test-client-v0.1",
-			Height:  0,
+			Version:    "test-client-v0.1",
+			Height:     0,
+			ListenAddr: "test-client:3001",
 		},
 	)
 
