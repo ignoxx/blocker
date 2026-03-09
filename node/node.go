@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"slices"
 	"sync"
 
 	"github.com/ignoxx/blocker/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/peer"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -43,9 +43,16 @@ func (n *Node) addPeer(c proto.NodeClient, v *proto.Version) {
 	n.peerLock.Lock()
 	defer n.peerLock.Unlock()
 
-	n.log("new peer connected", "height", v.Height, "addr", v.ListenAddr)
+	// TODO: handle the logic where we decide if we accept/drop the con
+	// ..
 
 	n.peers[c] = v
+
+	if len(v.PeerList) > 0 {
+		go n.bootstrapNetwork(v.PeerList)
+	}
+
+	n.log("new peer successfuly connected", "height", v.Height, "addr", v.ListenAddr)
 }
 
 func (n *Node) deletePeer(c proto.NodeClient) {
@@ -54,7 +61,7 @@ func (n *Node) deletePeer(c proto.NodeClient) {
 	delete(n.peers, c)
 }
 
-func (n *Node) Start(lnAddr string) error {
+func (n *Node) Start(lnAddr string, bootstrapNodes []string) error {
 	n.lnAddr = lnAddr
 
 	grpcServer := grpc.NewServer()
@@ -64,7 +71,12 @@ func (n *Node) Start(lnAddr string) error {
 	}
 
 	proto.RegisterNodeServer(grpcServer, n)
-	n.log("Starting gRPC server", "address", lnAddr)
+	n.log("Starting node")
+
+	// bootstrap the network with a list of already known nodes
+	if len(bootstrapNodes) > 0 {
+		go n.bootstrapNetwork(bootstrapNodes)
+	}
 
 	return grpcServer.Serve(ln)
 }
@@ -75,13 +87,14 @@ func (n *Node) HandleTransaction(ctx context.Context, tx *proto.Transaction) (*e
 }
 
 func (n *Node) Handshake(ctx context.Context, v *proto.Version) (*proto.Version, error) {
-	peer, _ := peer.FromContext(ctx)
-	_, err := makeNodeClient(v.ListenAddr)
+	c, err := makeNodeClient(v.ListenAddr)
 	if err != nil {
 		return nil, errors.New("handshake: " + err.Error())
 	}
 
-	n.log("received handshake", "version", v.Version, "addr", v.ListenAddr, "peerAddr", peer.Addr, "height", v.Height)
+	n.addPeer(c, v)
+
+	n.log("received handshake", "version", v.Version, "addr", v.ListenAddr, "height", v.Height)
 
 	return n.getVersion(), nil
 }
@@ -91,19 +104,55 @@ func (n *Node) getVersion() *proto.Version {
 		Version:    n.version,
 		Height:     n.height,
 		ListenAddr: n.lnAddr,
+		PeerList:   n.getPeerList(),
 	}
 }
 
-func (n *Node) BootstrapNetwork(addrs []string) error {
-	for _, addr := range addrs {
-		c, err := makeNodeClient(addr)
-		if err != nil {
-			return errors.New("bootstrap network: " + err.Error())
-		}
+func (n *Node) getPeerList() []string {
+	n.peerLock.RLock()
+	defer n.peerLock.RUnlock()
 
-		v, err := c.Handshake(context.TODO(), n.getVersion())
+	peerList := []string{}
+	for _, v := range n.peers {
+		peerList = append(peerList, v.ListenAddr)
+	}
+	return peerList
+}
+
+func (n *Node) dialRemoteNode(addr string) (proto.NodeClient, *proto.Version, error) {
+	c, err := makeNodeClient(addr)
+	if err != nil {
+		return nil, nil, errors.New("bootstrap network: " + err.Error())
+	}
+
+	v, err := c.Handshake(context.TODO(), n.getVersion())
+	if err != nil {
+		return nil, nil, errors.New("handshake: " + err.Error())
+	}
+
+	return c, v, nil
+}
+
+func (n *Node) canConnectWith(addr string) bool {
+	if addr == n.lnAddr {
+		return false
+	}
+
+	connectedPeers := n.getPeerList()
+	return !slices.Contains(connectedPeers, addr)
+}
+
+func (n *Node) bootstrapNetwork(addrs []string) error {
+	for _, addr := range addrs {
+		n.log("dialing remote node", "remote", addr)
+		if !n.canConnectWith(addr) {
+			continue
+		}
+		c, v, err := n.dialRemoteNode(addr)
+
 		if err != nil {
-			return errors.New("handshake: " + err.Error())
+			n.log("failed to connect to bootstrap node", "address", addr, "error", err)
+			continue
 		}
 
 		n.addPeer(c, v)
