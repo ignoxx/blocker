@@ -13,7 +13,11 @@ func SignBlock(pk crypto.PrivateKey, block *proto.Block) crypto.Signature {
 }
 
 func HashBlock(block *proto.Block) []byte {
-	b, err := pb.Marshal(block)
+	return HashHeader(block.Header)
+}
+
+func HashHeader(header *proto.Header) []byte {
+	b, err := pb.Marshal(header)
 	if err != nil {
 		panic(err)
 	}

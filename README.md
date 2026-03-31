@@ -1,6 +1,6 @@
 # blocker
 
-custom blockchain implementation from scratch
+custom UTXO blockchain implementation from scratch
 
 ## using
 - [ ] ED25519 crypto for (private)keys

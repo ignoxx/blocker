@@ -2,7 +2,7 @@ run:
 	@go run cmd/main.go
 
 test:
-	@go test -v -count=1 ./...
+	@go test -count=1 ./...
 
 .PHONY: proto
 proto:
