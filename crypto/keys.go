@@ -87,8 +87,8 @@ func PublicKeyFromBytes(b []byte) PublicKey {
 	}
 }
 
-func (p *PublicKey) Address() Address {
-	return Address{
+func (p *PublicKey) Address() *Address {
+	return &Address{
 		value: p.key[len(p.key)-addressSize:],
 	}
 }

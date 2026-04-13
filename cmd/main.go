@@ -5,8 +5,10 @@ import (
 	"log"
 	"time"
 
+	"github.com/ignoxx/blocker/crypto"
 	"github.com/ignoxx/blocker/node"
 	"github.com/ignoxx/blocker/proto"
+	"github.com/ignoxx/blocker/util"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -17,6 +19,9 @@ func main() {
 	makeNode(":4000", ":3000")
 	time.Sleep(5 * time.Second)
 	makeNode(":5001", ":4000")
+
+	time.Sleep(2 * time.Second)
+	makeTransaction(":3000")
 
 	select {}
 }
@@ -38,14 +43,27 @@ func makeTransaction(addr string) {
 	}
 
 	c := proto.NewNodeClient(client)
-	_, err = c.Handshake(
-		context.TODO(),
-		&proto.Version{
-			Version:    "test-client-v0.1",
-			Height:     0,
-			ListenAddr: "test-client:3001",
+	privKey, _ := crypto.GeneratePrivateKey()
+	pubKey := privKey.Public()
+
+	tx := &proto.Transaction{
+		Version: 1,
+		Inputs: []*proto.TxInput{
+			{
+				PrevTxHash:   util.RandomHash(),
+				PrevOutIndex: 0,
+				PublicKey:    pubKey.Bytes(),
+			},
 		},
-	)
+		Outputs: []*proto.TxOutput{
+			{
+				Amount:  99,
+				Address: pubKey.Address().Bytes(),
+			},
+		},
+	}
+
+	_, err = c.HandleTransaction(context.TODO(), tx)
 
 	if err != nil {
 		log.Fatal(err)

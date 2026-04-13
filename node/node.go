@@ -2,6 +2,7 @@ package node
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -10,14 +11,42 @@ import (
 	"sync"
 
 	"github.com/ignoxx/blocker/proto"
+	"github.com/ignoxx/blocker/types"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/peer"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 const (
 	version = "blocker-v0.1"
 )
+
+type Mempool struct {
+	txx map[string]*proto.Transaction
+}
+
+func NewMempool() *Mempool {
+	return &Mempool{
+		txx: map[string]*proto.Transaction{},
+	}
+}
+
+func (pool *Mempool) Has(tx *proto.Transaction) bool {
+	hash := hex.EncodeToString(types.HashTransaction(tx))
+	_, ok := pool.txx[hash]
+	return ok
+}
+
+func (pool *Mempool) Add(tx *proto.Transaction) bool {
+	hash := hex.EncodeToString(types.HashTransaction(tx))
+	if pool.Has(tx) {
+		return false
+	}
+
+	pool.txx[hash] = tx
+	return true
+}
 
 type Node struct {
 	lnAddr  string
@@ -27,6 +56,8 @@ type Node struct {
 
 	peerLock sync.RWMutex
 	peers    map[proto.NodeClient]*proto.Version
+	mempool  *Mempool
+	// TODO: might need a mutex for mempool too
 
 	proto.UnimplementedNodeServer
 }
@@ -36,6 +67,7 @@ func New() *Node {
 		version: version,
 		logger:  slog.Default(),
 		peers:   make(map[proto.NodeClient]*proto.Version),
+		mempool: NewMempool(),
 	}
 }
 
@@ -82,8 +114,19 @@ func (n *Node) Start(lnAddr string, bootstrapNodes []string) error {
 }
 
 func (n *Node) HandleTransaction(ctx context.Context, tx *proto.Transaction) (*emptypb.Empty, error) {
-	n.log("received transaction", "transaction", tx)
-	return nil, nil
+	peer, _ := peer.FromContext(ctx)
+	hash := hex.EncodeToString(types.HashTransaction(tx))
+
+	if n.mempool.Add(tx) {
+		n.log("received tx", "from", peer.Addr, "hash", hash, "we", n.lnAddr)
+		go func() {
+			if err := n.broadcast(tx); err != nil {
+				n.log("broadcast failed", "err", err)
+			}
+		}()
+	}
+
+	return &emptypb.Empty{}, nil
 }
 
 func (n *Node) Handshake(ctx context.Context, v *proto.Version) (*proto.Version, error) {
@@ -97,6 +140,20 @@ func (n *Node) Handshake(ctx context.Context, v *proto.Version) (*proto.Version,
 	n.log("received handshake", "version", v.Version, "addr", v.ListenAddr, "height", v.Height)
 
 	return n.getVersion(), nil
+}
+
+func (n *Node) broadcast(msg any) error {
+	for peer := range n.peers {
+		switch v := msg.(type) {
+		case *proto.Transaction:
+			_, err := peer.HandleTransaction(context.Background(), v)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 func (n *Node) getVersion() *proto.Version {
