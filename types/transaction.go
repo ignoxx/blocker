@@ -30,7 +30,7 @@ func VerifyTransaction(tx *proto.Transaction) bool {
 		// TODO: make sure we dont run into prob. after verification
 		// because we do not want to hash the signature field
 		input.Signature = nil
-		if !sig.Verify(pubKey, HashTransaction(tx)) {
+		if !sig.Verify(&pubKey, HashTransaction(tx)) {
 			return false
 		}
 	}

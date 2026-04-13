@@ -17,7 +17,7 @@ func main() {
 	makeNode(":3000", true)
 	time.Sleep(time.Second)
 	makeNode(":4000", false, ":3000")
-	time.Sleep(5 * time.Second)
+	time.Sleep(2 * time.Second)
 	makeNode(":5001", false, ":4000")
 
 	for {

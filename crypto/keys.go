@@ -9,11 +9,11 @@ import (
 )
 
 const (
-	publicKeySize  = 32
-	privateKeySize = 64
-	seedSize       = 32
-	addressSize    = 20
-	sigSize        = 64
+	PublicKeySize  = 32
+	PrivateKeySize = 64
+	SeedSize       = 32
+	AddressSize    = 20
+	SigSize        = 64
 )
 
 type PrivateKey struct {
@@ -21,7 +21,7 @@ type PrivateKey struct {
 }
 
 func GeneratePrivateKey() (PrivateKey, error) {
-	seed := make([]byte, seedSize)
+	seed := make([]byte, SeedSize)
 	_, err := io.ReadFull(rand.Reader, seed)
 	if err != nil {
 		return PrivateKey{}, fmt.Errorf("failed to generate random seed: %w", err)
@@ -42,8 +42,8 @@ func NewPrivateKeyFromString(seedHx string) (PrivateKey, error) {
 }
 
 func NewPrivateKeyFromSeed(seed []byte) (PrivateKey, error) {
-	if len(seed) != seedSize {
-		return PrivateKey{}, fmt.Errorf("invalid seed length: expected %d bytes, got %d bytes", seedSize, len(seed))
+	if len(seed) != SeedSize {
+		return PrivateKey{}, fmt.Errorf("invalid seed length: expected %d bytes, got %d bytes", SeedSize, len(seed))
 	}
 
 	return PrivateKey{
@@ -65,10 +65,10 @@ func (p *PrivateKey) Sign(msg []byte) Signature {
 	}
 }
 
-func (p *PrivateKey) Public() PublicKey {
-	b := make([]byte, publicKeySize)
-	copy(b, p.key[len(p.key)-publicKeySize:])
-	return PublicKey{
+func (p *PrivateKey) Public() *PublicKey {
+	b := make([]byte, PublicKeySize)
+	copy(b, p.key[len(p.key)-PublicKeySize:])
+	return &PublicKey{
 		key: b,
 	}
 }
@@ -78,8 +78,8 @@ type PublicKey struct {
 }
 
 func PublicKeyFromBytes(b []byte) PublicKey {
-	if len(b) != publicKeySize {
-		panic(fmt.Sprintf("invalid public key length: expected %d bytes, got %d bytes", publicKeySize, len(b)))
+	if len(b) != PublicKeySize {
+		panic(fmt.Sprintf("invalid public key length: expected %d bytes, got %d bytes", PublicKeySize, len(b)))
 	}
 
 	return PublicKey{
@@ -89,7 +89,7 @@ func PublicKeyFromBytes(b []byte) PublicKey {
 
 func (p *PublicKey) Address() *Address {
 	return &Address{
-		value: p.key[len(p.key)-addressSize:],
+		value: p.key[len(p.key)-AddressSize:],
 	}
 }
 
@@ -106,8 +106,8 @@ type Signature struct {
 }
 
 func SignatureFromBytes(b []byte) Signature {
-	if len(b) != sigSize {
-		panic(fmt.Sprintf("invalid signature length: expected %d bytes, got %d bytes", sigSize, len(b)))
+	if len(b) != SigSize {
+		panic(fmt.Sprintf("invalid signature length: expected %d bytes, got %d bytes", SigSize, len(b)))
 	}
 
 	return Signature{
@@ -118,7 +118,7 @@ func (s *Signature) Bytes() []byte {
 	return s.value
 }
 
-func (s *Signature) Verify(pubKey PublicKey, msg []byte) bool {
+func (s *Signature) Verify(pubKey *PublicKey, msg []byte) bool {
 	return ed25519.Verify(pubKey.key, msg, s.value)
 }
 

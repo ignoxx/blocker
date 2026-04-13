@@ -1,9 +1,11 @@
 package node
 
 import (
+	"bytes"
 	"encoding/hex"
 	"fmt"
 
+	"github.com/ignoxx/blocker/crypto"
 	"github.com/ignoxx/blocker/proto"
 	"github.com/ignoxx/blocker/types"
 )
@@ -47,10 +49,14 @@ type Chain struct {
 }
 
 func NewChain(bs BlockStorer) *Chain {
-	return &Chain{
+	chain := &Chain{
 		blockStore: bs,
 		headers:    NewHeaderList(),
 	}
+
+	// TODO: just for testing
+	chain.addBlock(createGenesisBlock())
+	return chain
 }
 
 func (c *Chain) Height() int {
@@ -58,8 +64,15 @@ func (c *Chain) Height() int {
 }
 
 func (c *Chain) AddBlock(b *proto.Block) error {
+	if err := c.ValidateBlock(b); err != nil {
+		return err
+	}
+
+	return c.addBlock(b)
+}
+
+func (c *Chain) addBlock(b *proto.Block) error {
 	c.headers.Add(b.Header)
-	// TODO: validation
 	return c.blockStore.Put(b)
 }
 
@@ -76,4 +89,38 @@ func (c *Chain) GetBlockByHeight(height int) (*proto.Block, error) {
 	header := c.headers.Get(height)
 	hash := types.HashHeader(header)
 	return c.GetBlockByHash(hash)
+}
+
+func (c *Chain) ValidateBlock(b *proto.Block) error {
+	// validate the signature of the block
+	if !types.VerifyBlock(b) {
+		return fmt.Errorf("invalid block: signature verification failed")
+	}
+
+	// validate if the prevHash is the actually hash of the current block
+	currentBlock, err := c.GetBlockByHeight(c.Height())
+	if err != nil {
+		return err
+	}
+
+	hash := types.HashBlock(currentBlock)
+	if !bytes.Equal(hash, b.Header.PrevHash) {
+		return fmt.Errorf("invalid block: expected prev hash %s, got %s", hex.EncodeToString(hash), hex.EncodeToString(b.Header.PrevHash))
+	}
+
+	return nil
+}
+
+func createGenesisBlock() *proto.Block {
+	// TODO: make determenistic
+	privKey, _ := crypto.GeneratePrivateKey()
+	block := &proto.Block{
+		Header: &proto.Header{
+			Version: 1,
+		},
+	}
+
+	types.SignBlock(privKey, block)
+
+	return block
 }

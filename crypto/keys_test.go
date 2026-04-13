@@ -9,10 +9,10 @@ import (
 func TestGenPrivateKey(t *testing.T) {
 	privKey, err := GeneratePrivateKey()
 	assert.NoError(t, err)
-	assert.Equal(t, privateKeySize, len(privKey.Bytes()))
+	assert.Equal(t, PrivateKeySize, len(privKey.Bytes()))
 
 	pubKey := privKey.Public()
-	assert.Equal(t, publicKeySize, len(pubKey.Bytes()))
+	assert.Equal(t, PublicKeySize, len(pubKey.Bytes()))
 }
 
 func TestPrivateKeySign(t *testing.T) {
@@ -38,7 +38,7 @@ func TestPublicKeyToAddress(t *testing.T) {
 	pubKey := privKey.Public()
 	addr := pubKey.Address()
 
-	assert.Equal(t, addressSize, len(addr.Bytes()))
+	assert.Equal(t, AddressSize, len(addr.Bytes()))
 }
 
 func TestNewPrivateKeyFromString(t *testing.T) {
@@ -48,13 +48,13 @@ func TestNewPrivateKeyFromString(t *testing.T) {
 		privKey, err = NewPrivateKeyFromString(seedHx)
 	)
 	assert.NoError(t, err)
-	assert.Len(t, privKey.Bytes(), privateKeySize)
+	assert.Len(t, privKey.Bytes(), PrivateKeySize)
 
 	var (
 		actualpubKey = privKey.Public()
 		addr         = actualpubKey.Address()
 	)
 	assert.NotEmpty(t, addr)
-	assert.Len(t, addr.Bytes(), addressSize)
+	assert.Len(t, addr.Bytes(), AddressSize)
 	assert.Equal(t, address, addr.String())
 }
