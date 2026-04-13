@@ -14,22 +14,34 @@ import (
 )
 
 func main() {
-	makeNode(":3000")
+	makeNode(":3000", true)
 	time.Sleep(time.Second)
-	makeNode(":4000", ":3000")
+	makeNode(":4000", false, ":3000")
 	time.Sleep(5 * time.Second)
-	makeNode(":5001", ":4000")
+	makeNode(":5001", false, ":4000")
 
-	time.Sleep(2 * time.Second)
-	makeTransaction(":3000")
+	for {
+		time.Sleep(2 * time.Second)
+		makeTransaction(":3000")
+	}
 
-	select {}
+	// select {}
 }
 
-func makeNode(lnAddr string, bootstrapNodes ...string) *node.Node {
-	n := node.New()
+func makeNode(lnAddr string, isValidator bool, bootstrapNodes ...string) *node.Node {
+	cfg := node.ServerConfig{
+		Version:    "blocker-v1",
+		ListenAddr: lnAddr,
+	}
+
+	if isValidator {
+		privKey, _ := crypto.GeneratePrivateKey()
+		cfg.PrivateKey = &privKey
+	}
+
+	n := node.NewNode(cfg)
 	go func() {
-		if err := n.Start(lnAddr, bootstrapNodes); err != nil {
+		if err := n.Start(bootstrapNodes); err != nil {
 			log.Fatal(err)
 		}
 	}()

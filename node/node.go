@@ -9,7 +9,9 @@ import (
 	"net"
 	"slices"
 	"sync"
+	"time"
 
+	"github.com/ignoxx/blocker/crypto"
 	"github.com/ignoxx/blocker/proto"
 	"github.com/ignoxx/blocker/types"
 	"google.golang.org/grpc"
@@ -19,7 +21,7 @@ import (
 )
 
 const (
-	version = "blocker-v0.1"
+	blockTime = time.Second * 5
 )
 
 type Mempool struct {
@@ -48,7 +50,14 @@ func (pool *Mempool) Add(tx *proto.Transaction) bool {
 	return true
 }
 
+type ServerConfig struct {
+	Version    string
+	ListenAddr string
+	PrivateKey *crypto.PrivateKey
+}
+
 type Node struct {
+	ServerConfig
 	lnAddr  string
 	height  int32
 	version string
@@ -62,12 +71,12 @@ type Node struct {
 	proto.UnimplementedNodeServer
 }
 
-func New() *Node {
+func NewNode(cfg ServerConfig) *Node {
 	return &Node{
-		version: version,
-		logger:  slog.Default(),
-		peers:   make(map[proto.NodeClient]*proto.Version),
-		mempool: NewMempool(),
+		logger:       slog.Default(),
+		peers:        make(map[proto.NodeClient]*proto.Version),
+		mempool:      NewMempool(),
+		ServerConfig: cfg,
 	}
 }
 
@@ -93,11 +102,9 @@ func (n *Node) deletePeer(c proto.NodeClient) {
 	delete(n.peers, c)
 }
 
-func (n *Node) Start(lnAddr string, bootstrapNodes []string) error {
-	n.lnAddr = lnAddr
-
+func (n *Node) Start(bootstrapNodes []string) error {
 	grpcServer := grpc.NewServer()
-	ln, err := net.Listen("tcp", lnAddr)
+	ln, err := net.Listen("tcp", n.ListenAddr)
 	if err != nil {
 		return errors.New("node start: " + err.Error())
 	}
@@ -108,6 +115,10 @@ func (n *Node) Start(lnAddr string, bootstrapNodes []string) error {
 	// bootstrap the network with a list of already known nodes
 	if len(bootstrapNodes) > 0 {
 		go n.bootstrapNetwork(bootstrapNodes)
+	}
+
+	if n.PrivateKey != nil {
+		go n.validatorLoop()
 	}
 
 	return grpcServer.Serve(ln)
@@ -142,6 +153,22 @@ func (n *Node) Handshake(ctx context.Context, v *proto.Version) (*proto.Version,
 	return n.getVersion(), nil
 }
 
+func (n *Node) validatorLoop() {
+	n.log("starting validator loop", "pubKey", n.PrivateKey.Public(), "blocktime", blockTime)
+	ticker := time.NewTicker(blockTime)
+	for {
+		<-ticker.C
+
+		n.log("time to create a new block", "lenTx", len(n.mempool.txx))
+
+		for hash := range n.mempool.txx {
+			// unsafe!
+			delete(n.mempool.txx, hash)
+		}
+
+	}
+}
+
 func (n *Node) broadcast(msg any) error {
 	for peer := range n.peers {
 		switch v := msg.(type) {
@@ -158,9 +185,9 @@ func (n *Node) broadcast(msg any) error {
 
 func (n *Node) getVersion() *proto.Version {
 	return &proto.Version{
-		Version:    n.version,
+		Version:    n.Version,
 		Height:     n.height,
-		ListenAddr: n.lnAddr,
+		ListenAddr: n.ListenAddr,
 		PeerList:   n.getPeerList(),
 	}
 }
