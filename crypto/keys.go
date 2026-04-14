@@ -41,6 +41,15 @@ func NewPrivateKeyFromString(seedHx string) (PrivateKey, error) {
 	return NewPrivateKeyFromSeed(seed)
 }
 
+func NewPrivateKeyFromSeedStr(seed string) (PrivateKey, error) {
+	seedBytes, err := hex.DecodeString(seed)
+	if err != nil {
+		return PrivateKey{}, fmt.Errorf("failed to decode seed hex string: %w", err)
+	}
+
+	return NewPrivateKeyFromSeed(seedBytes)
+}
+
 func NewPrivateKeyFromSeed(seed []byte) (PrivateKey, error) {
 	if len(seed) != SeedSize {
 		return PrivateKey{}, fmt.Errorf("invalid seed length: expected %d bytes, got %d bytes", SeedSize, len(seed))

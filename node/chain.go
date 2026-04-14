@@ -10,6 +10,8 @@ import (
 	"github.com/ignoxx/blocker/types"
 )
 
+var MasterSeed = "0f71b4d49b833860f40ef07c39556287a239c1a27bc26fd5261b99f56af867f2"
+
 type HeaderList struct {
 	headers []*proto.Header
 }
@@ -44,12 +46,14 @@ func (list *HeaderList) Height() int {
 }
 
 type Chain struct {
+	txStore    TxStorer
 	blockStore BlockStorer
 	headers    *HeaderList
 }
 
-func NewChain(bs BlockStorer) *Chain {
+func NewChain(bs BlockStorer, txStore TxStorer) *Chain {
 	chain := &Chain{
+		txStore:    txStore,
 		blockStore: bs,
 		headers:    NewHeaderList(),
 	}
@@ -73,6 +77,14 @@ func (c *Chain) AddBlock(b *proto.Block) error {
 
 func (c *Chain) addBlock(b *proto.Block) error {
 	c.headers.Add(b.Header)
+
+	for _, tx := range b.Transactions {
+		fmt.Println("NEW TX", hex.EncodeToString(types.HashTransaction(tx)))
+		if err := c.txStore.Put(tx); err != nil {
+			return fmt.Errorf("failed to store transaction: %w", err)
+		}
+	}
+
 	return c.blockStore.Put(b)
 }
 
@@ -112,14 +124,25 @@ func (c *Chain) ValidateBlock(b *proto.Block) error {
 }
 
 func createGenesisBlock() *proto.Block {
-	// TODO: make determenistic
-	privKey, _ := crypto.GeneratePrivateKey()
+	privKey, _ := crypto.NewPrivateKeyFromSeedStr(MasterSeed)
 	block := &proto.Block{
 		Header: &proto.Header{
 			Version: 1,
 		},
 	}
 
+	tx := &proto.Transaction{
+		Version: 1,
+		Inputs:  []*proto.TxInput{},
+		Outputs: []*proto.TxOutput{
+			{
+				Amount:  1_000,
+				Address: privKey.Public().Bytes(),
+			},
+		},
+	}
+
+	block.Transactions = append(block.Transactions, tx)
 	types.SignBlock(privKey, block)
 
 	return block
