@@ -11,6 +11,42 @@ import (
 
 var _ BlockStorer = (*MemoryBlockStore)(nil)
 
+type UTXOStorer interface {
+	Put(*UTXO) error
+	Get(string) (*UTXO, error)
+}
+
+type UTXOStore struct {
+	lock sync.RWMutex
+	data map[string]*UTXO
+}
+
+func NewUTXOStore() *UTXOStore {
+	return &UTXOStore{
+		data: map[string]*UTXO{},
+	}
+}
+
+func (s *UTXOStore) Put(utxo *UTXO) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	key := fmt.Sprintf("%s:%d", utxo.Hash, utxo.Index)
+	s.data[key] = utxo
+	return nil
+}
+
+func (s *UTXOStore) Get(key string) (*UTXO, error) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	utxo, ok := s.data[key]
+	if !ok {
+		return nil, fmt.Errorf("utxo not found: %s", key)
+	}
+
+	return utxo, nil
+}
+
 type TxStorer interface {
 	Put(*proto.Transaction) error
 	Get(string) (*proto.Transaction, error)

@@ -45,9 +45,17 @@ func (list *HeaderList) Height() int {
 	return len(list.headers) - 1
 }
 
+type UTXO struct {
+	Hash   string
+	Index  int
+	Amount int64
+	Spent  bool
+}
+
 type Chain struct {
 	txStore    TxStorer
 	blockStore BlockStorer
+	utxoStore  UTXOStorer
 	headers    *HeaderList
 }
 
@@ -55,6 +63,7 @@ func NewChain(bs BlockStorer, txStore TxStorer) *Chain {
 	chain := &Chain{
 		txStore:    txStore,
 		blockStore: bs,
+		utxoStore:  NewUTXOStore(),
 		headers:    NewHeaderList(),
 	}
 
@@ -82,6 +91,20 @@ func (c *Chain) addBlock(b *proto.Block) error {
 		fmt.Println("NEW TX", hex.EncodeToString(types.HashTransaction(tx)))
 		if err := c.txStore.Put(tx); err != nil {
 			return fmt.Errorf("failed to store transaction: %w", err)
+		}
+
+		hash := hex.EncodeToString(types.HashTransaction(tx))
+		for i, output := range tx.Outputs {
+			utxo := &UTXO{
+				Hash:   hash,
+				Index:  i,
+				Amount: output.Amount,
+				Spent:  false,
+			}
+
+			if err := c.utxoStore.Put(utxo); err != nil {
+				return fmt.Errorf("failed to store utxo: %w", err)
+			}
 		}
 	}
 
@@ -120,6 +143,50 @@ func (c *Chain) ValidateBlock(b *proto.Block) error {
 		return fmt.Errorf("invalid block: expected prev hash %s, got %s", hex.EncodeToString(hash), hex.EncodeToString(b.Header.PrevHash))
 	}
 
+	for _, tx := range b.Transactions {
+		if err := c.ValidateTransaction(tx); err != nil {
+			return fmt.Errorf("invalid block: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (c *Chain) ValidateTransaction(tx *proto.Transaction) error {
+	// Verify sig
+	if !types.VerifyTransaction(tx) {
+		return fmt.Errorf("invalid block: transaction signature verification failed")
+	}
+
+	// check if all the outputs are unspent
+
+	nInputs := len(tx.Inputs)
+	hash := hex.EncodeToString(types.HashTransaction(tx))
+	sumInputs := 0
+
+	for i := range nInputs {
+		prevHash := hex.EncodeToString(tx.Inputs[i].PrevTxHash)
+		key := fmt.Sprintf("%s:%d", prevHash, i)
+		utxo, err := c.utxoStore.Get(key)
+		if err != nil {
+			return fmt.Errorf("invalid block: %w", err)
+		}
+		sumInputs += int(utxo.Amount)
+
+		if utxo.Spent {
+			return fmt.Errorf("invalid block: transaction input %s:%d is already spent", hash, i)
+		}
+	}
+
+	sumOutputs := 0
+	for _, output := range tx.Outputs {
+		sumOutputs += int(output.Amount)
+	}
+
+	if sumInputs < sumOutputs {
+		return fmt.Errorf("invalid block: transaction inputs %d are less than outputs %d", sumInputs, sumOutputs)
+	}
+
 	return nil
 }
 
@@ -137,7 +204,7 @@ func createGenesisBlock() *proto.Block {
 		Outputs: []*proto.TxOutput{
 			{
 				Amount:  1_000,
-				Address: privKey.Public().Bytes(),
+				Address: privKey.Public().Address().Bytes(),
 			},
 		},
 	}

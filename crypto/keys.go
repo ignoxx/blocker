@@ -135,6 +135,16 @@ type Address struct {
 	value []byte
 }
 
+func AddressFromBytes(b []byte) Address {
+	if len(b) != AddressSize {
+		panic(fmt.Sprintf("invalid address length: expected %d bytes, got %d bytes", AddressSize, len(b)))
+	}
+
+	return Address{
+		value: b,
+	}
+}
+
 func (a Address) String() string {
 	return hex.EncodeToString(a.value)
 }

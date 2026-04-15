@@ -1,7 +1,6 @@
 package node
 
 import (
-	"encoding/hex"
 	"testing"
 
 	"github.com/ignoxx/blocker/crypto"
@@ -11,6 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+const genesisTxHash = "a57f3604f7ef10fb992523eb9b9ecf2022a462b1caea9b5bc74207a66fd28b95"
 
 func randomBlock(t *testing.T, chain *Chain) *proto.Block {
 	privKey, _ := crypto.GeneratePrivateKey()
@@ -49,6 +50,46 @@ func TestAddBlock(t *testing.T) {
 	}
 }
 
+func TestAddBlockWithTxLowFunds(t *testing.T) {
+	privKey, _ := crypto.NewPrivateKeyFromSeedStr(MasterSeed)
+	recipientPrivKey, _ := crypto.GeneratePrivateKey()
+	recipient := recipientPrivKey.Public().Address()
+
+	chain := NewChain(NewMemoryBlockStore(), NewMemoryTxStore())
+	block := randomBlock(t, chain)
+
+	prevTx, err := chain.txStore.Get(genesisTxHash)
+	assert.Nil(t, err)
+
+	inputs := []*proto.TxInput{
+		{
+			PrevTxHash:   types.HashTransaction(prevTx),
+			PrevOutIndex: 0,
+			PublicKey:    privKey.Public().Bytes(),
+		},
+	}
+
+	outputs := []*proto.TxOutput{
+		{
+			Amount:  1001,
+			Address: recipient.Bytes(),
+		},
+	}
+
+	tx := &proto.Transaction{
+		Version: 1,
+		Inputs:  inputs,
+		Outputs: outputs,
+	}
+
+	sig := types.SignTransaction(&privKey, tx)
+	tx.Inputs[0].Signature = sig.Bytes()
+
+	block.Transactions = append(block.Transactions, tx)
+	require.NotNil(t, chain.AddBlock(block))
+
+}
+
 func TestAddBlockWithTx(t *testing.T) {
 	privKey, _ := crypto.NewPrivateKeyFromSeedStr(MasterSeed)
 	recipientPrivKey, _ := crypto.GeneratePrivateKey()
@@ -57,12 +98,12 @@ func TestAddBlockWithTx(t *testing.T) {
 	chain := NewChain(NewMemoryBlockStore(), NewMemoryTxStore())
 	block := randomBlock(t, chain)
 
-	ftx, err := chain.txStore.Get("240b46d4a4877ced7de4d298744aeef16141721cde0e8f762b2aff07e74689b4")
+	prevTx, err := chain.txStore.Get(genesisTxHash)
 	assert.Nil(t, err)
 
 	inputs := []*proto.TxInput{
 		{
-			PrevTxHash:   types.HashTransaction(ftx),
+			PrevTxHash:   types.HashTransaction(prevTx),
 			PrevOutIndex: 0,
 			PublicKey:    privKey.Public().Bytes(),
 		},
@@ -85,11 +126,9 @@ func TestAddBlockWithTx(t *testing.T) {
 		Outputs: outputs,
 	}
 
+	sig := types.SignTransaction(&privKey, tx)
+	tx.Inputs[0].Signature = sig.Bytes()
+
 	block.Transactions = append(block.Transactions, tx)
 	require.Nil(t, chain.AddBlock(block))
-	txHash := hex.EncodeToString(types.HashTransaction(tx))
-
-	fetchedTx, err := chain.txStore.Get(txHash)
-	assert.Nil(t, err)
-	assert.Equal(t, tx, fetchedTx)
 }

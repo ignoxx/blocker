@@ -24,8 +24,14 @@ func HashTransaction(block *proto.Transaction) []byte {
 
 func VerifyTransaction(tx *proto.Transaction) bool {
 	for _, input := range tx.Inputs {
-		sig := crypto.SignatureFromBytes(input.Signature)
-		pubKey := crypto.PublicKeyFromBytes(input.PublicKey)
+		if len(input.Signature) == 0 {
+			panic("the tx input is not signed")
+		}
+
+		var (
+			sig    = crypto.SignatureFromBytes(input.Signature)
+			pubKey = crypto.PublicKeyFromBytes(input.PublicKey)
+		)
 
 		// TODO: make sure we dont run into prob. after verification
 		// because we do not want to hash the signature field
