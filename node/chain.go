@@ -106,6 +106,19 @@ func (c *Chain) addBlock(b *proto.Block) error {
 				return fmt.Errorf("failed to store utxo: %w", err)
 			}
 		}
+
+		for _, input := range tx.Inputs {
+			key := fmt.Sprintf("%s:%d", hex.EncodeToString(input.PrevTxHash), input.PrevOutIndex)
+			utxo, err := c.utxoStore.Get(key)
+			if err != nil {
+				return fmt.Errorf("failed to get utxo: %w", err)
+			}
+
+			utxo.Spent = true
+			if err := c.utxoStore.Put(utxo); err != nil {
+				return fmt.Errorf("failed to update utxo: %w", err)
+			}
+		}
 	}
 
 	return c.blockStore.Put(b)

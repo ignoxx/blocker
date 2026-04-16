@@ -33,12 +33,14 @@ func VerifyTransaction(tx *proto.Transaction) bool {
 			pubKey = crypto.PublicKeyFromBytes(input.PublicKey)
 		)
 
-		// TODO: make sure we dont run into prob. after verification
-		// because we do not want to hash the signature field
+		// we do not want to hash the signature field
+		tmpSig := input.Signature
 		input.Signature = nil
 		if !sig.Verify(&pubKey, HashTransaction(tx)) {
 			return false
 		}
+
+		input.Signature = tmpSig
 	}
 
 	return true
