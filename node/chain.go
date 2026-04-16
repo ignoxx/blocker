@@ -145,6 +145,11 @@ func (c *Chain) ValidateBlock(b *proto.Block) error {
 		return fmt.Errorf("invalid block: signature verification failed")
 	}
 
+	expectedHeight := c.Height() + 1
+	if b.Header.Height != int32(expectedHeight) {
+		return fmt.Errorf("invalid block: expected height %d, got %d", expectedHeight, b.Header.Height)
+	}
+
 	// validate if the prevHash is the actually hash of the current block
 	currentBlock, err := c.GetBlockByHeight(c.Height())
 	if err != nil {
@@ -207,7 +212,9 @@ func createGenesisBlock() *proto.Block {
 	privKey, _ := crypto.NewPrivateKeyFromSeedStr(MasterSeed)
 	block := &proto.Block{
 		Header: &proto.Header{
-			Version: 1,
+			Version:   1,
+			Height:    0,
+			Timestamp: 0,
 		},
 	}
 
