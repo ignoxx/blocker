@@ -3,7 +3,6 @@ package util
 import (
 	randc "crypto/rand"
 	"io"
-	"math/rand"
 	"time"
 
 	"github.com/ignoxx/blocker/proto"
@@ -15,12 +14,11 @@ func RandomHash() []byte {
 	return hash
 }
 
-func RandomBlock() *proto.Block {
+func RandomBlock(height int, prevHash []byte) *proto.Block {
 	header := &proto.Header{
 		Version:   1,
-		Height:    int32(rand.Intn(1000)),
-		PrevHash:  RandomHash(),
-		RootHash:  RandomHash(),
+		Height:    int32(height),
+		PrevHash:  prevHash,
 		Timestamp: time.Now().UnixNano(),
 	}
 

@@ -12,7 +12,7 @@ import (
 func TestCalculateRootHash(t *testing.T) {
 	var (
 		privKey, _ = crypto.GeneratePrivateKey()
-		block      = util.RandomBlock()
+		block      = util.RandomBlock(0, nil)
 		tx         = &proto.Transaction{
 			Version: 1,
 		}
@@ -27,7 +27,7 @@ func TestCalculateRootHash(t *testing.T) {
 
 func TestSignVerifyBlock(t *testing.T) {
 	var (
-		block      = util.RandomBlock()
+		block      = util.RandomBlock(0, nil)
 		privKey, _ = crypto.GeneratePrivateKey()
 		pubKey     = privKey.Public()
 	)
@@ -44,7 +44,7 @@ func TestSignVerifyBlock(t *testing.T) {
 }
 
 func TestHashBlock(t *testing.T) {
-	block := util.RandomBlock()
+	block := util.RandomBlock(0, nil)
 	hash := HashBlock(block)
 	assert.Len(t, hash, 32)
 }

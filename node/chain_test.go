@@ -15,9 +15,9 @@ const genesisTxHash = "a57f3604f7ef10fb992523eb9b9ecf2022a462b1caea9b5bc74207a66
 
 func randomBlock(t *testing.T, chain *Chain) *proto.Block {
 	privKey, _ := crypto.GeneratePrivateKey()
-	block := util.RandomBlock()
 	prevBlock, err := chain.GetBlockByHeight(chain.Height())
 	require.Nil(t, err)
+	block := util.RandomBlock(chain.Height()+1, types.HashBlock(prevBlock))
 	block.Header.PrevHash = types.HashBlock(prevBlock)
 	types.SignBlock(privKey, block)
 	return block
