@@ -2,26 +2,48 @@
 
 custom UTXO blockchain implementation from scratch
 
-## using
-- [x] ED25519 crypto for (private)keys
-- [x] UTXO model
-- [x] Protobuffer encoding
-- [x] GRPC transport (gossip, communication between nodes)
-- [x] Proof of Stake (PoS) consensus (round-robin, event-driven)
-- [x] Minimal wallet CLI (create, balance, transactions)
+## features
+- [x] ED25519 crypto for keys and signatures
+- [x] UTXO transaction model
+- [x] Protobuf encoding
+- [x] gRPC transport (p2p gossip between nodes)
+- [x] Proof of Stake (PoS) consensus — round-robin, event-driven
+- [x] Wallet CLI — create wallet, query balance/transactions, send coins
+- [x] Block validation — height, prevHash, proposer, signature, UTXO double-spend
+
+## run the network
+
+```bash
+# Start 3 validator nodes
+make run
+```
+
+Nodes will bootstrap, connect to each other, and produce blocks only when there are transactions to include.
 
 ## cli
 
 ```bash
-# Create a new wallet
+# Create a new wallet (prints 64-char seed + address)
 make cli create
 
-# Query balance (use any node's grpc address)
-make cli balance -addr <hex-address>
-make cli balance -node :4000 -addr 36f8343eaa41afbff509addde0f5cb4a0691295b
+# Query balance for an address
+make cli balance <hex-address>
+make cli -node :4000 balance 36f8343eaa41afbff509addde0f5cb4a0691295b
 
-# Query transactions
-make cli txs -addr <hex-address>
+# Query transactions for an address
+make cli txs <hex-address>
+
+# Send coins (uses your private key seed + recipient address + amount)
+make cli send <your-priv-key-seed> <recipient-address> <amount>
+make cli send 0f71b4d... 72974c1... 100
+```
+
+## genesis
+
+The genesis block allocates **1000** coins to a fixed address derived from the hardcoded seed. This is the address you can spend from in the demo:
+
+```
+Address: 36f8343eaa41afbff509addde0f5cb4a0691295b
 ```
 
 ## not production-ready (high-level gaps)
@@ -44,7 +66,6 @@ this is a learning project. a production blockchain would need at least the foll
 ### data layer
 - **persistent storage** — everything is in-memory; restart loses all data
 - **state snapshots / pruning** — chain grows forever, no old state cleanup
-- **transaction indexing** — no way to query tx history efficiently
 - **merkle proofs** — can't prove inclusion of a tx to a light client
 
 ### transactions / vm
