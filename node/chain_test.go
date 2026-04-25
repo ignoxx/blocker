@@ -14,17 +14,22 @@ import (
 const genesisTxHash = "a57f3604f7ef10fb992523eb9b9ecf2022a462b1caea9b5bc74207a66fd28b95"
 
 func randomBlock(t *testing.T, chain *Chain) *proto.Block {
-	privKey, _ := crypto.GeneratePrivateKey()
+	genesisPrivKey, _ := crypto.NewPrivateKeyFromSeedStr(MasterSeed)
 	prevBlock, err := chain.GetBlockByHeight(chain.Height())
 	require.Nil(t, err)
 	block := util.RandomBlock(chain.Height()+1, types.HashBlock(prevBlock))
-	block.Header.PrevHash = types.HashBlock(prevBlock)
-	types.SignBlock(privKey, block)
+	types.SignBlock(genesisPrivKey, block)
 	return block
 }
 
+func newTestChain() *Chain {
+	genesisPrivKey, _ := crypto.NewPrivateKeyFromSeedStr(MasterSeed)
+	validators := NewValidatorSet([]*crypto.PublicKey{genesisPrivKey.Public()})
+	return NewChain(NewMemoryBlockStore(), NewMemoryTxStore(), validators)
+}
+
 func TestChainHeight(t *testing.T) {
-	chain := NewChain(NewMemoryBlockStore(), NewMemoryTxStore())
+	chain := newTestChain()
 	for i := range 100 {
 		block := randomBlock(t, chain)
 		require.Nil(t, chain.AddBlock(block))
@@ -33,7 +38,7 @@ func TestChainHeight(t *testing.T) {
 }
 
 func TestAddBlock(t *testing.T) {
-	chain := NewChain(NewMemoryBlockStore(), NewMemoryTxStore())
+	chain := newTestChain()
 
 	for i := range 100 {
 		block := randomBlock(t, chain)
@@ -55,7 +60,7 @@ func TestAddBlockWithTxLowFunds(t *testing.T) {
 	recipientPrivKey, _ := crypto.GeneratePrivateKey()
 	recipient := recipientPrivKey.Public().Address()
 
-	chain := NewChain(NewMemoryBlockStore(), NewMemoryTxStore())
+	chain := newTestChain()
 	block := randomBlock(t, chain)
 
 	prevTx, err := chain.txStore.Get(genesisTxHash)
@@ -95,7 +100,7 @@ func TestAddBlockWithTx(t *testing.T) {
 	recipientPrivKey, _ := crypto.GeneratePrivateKey()
 	recipient := recipientPrivKey.Public().Address()
 
-	chain := NewChain(NewMemoryBlockStore(), NewMemoryTxStore())
+	chain := newTestChain()
 	block := randomBlock(t, chain)
 
 	prevTx, err := chain.txStore.Get(genesisTxHash)

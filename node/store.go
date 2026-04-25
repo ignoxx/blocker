@@ -110,8 +110,8 @@ func (m *MemoryBlockStore) Get(hash string) (*proto.Block, error) {
 }
 
 func (m *MemoryBlockStore) Put(block *proto.Block) error {
-	m.lock.RLock()
-	defer m.lock.RUnlock()
+	m.lock.Lock()
+	defer m.lock.Unlock()
 	hash := hex.EncodeToString(types.HashBlock(block))
 	m.blocks[hash] = block
 	return nil

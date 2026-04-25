@@ -20,10 +20,6 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-const (
-	blockTime = time.Second * 5
-)
-
 type Mempool struct {
 	lock sync.RWMutex
 	txx  map[string]*proto.Transaction
@@ -92,19 +88,26 @@ type Node struct {
 	version string
 	logger  *slog.Logger
 
-	peerLock sync.RWMutex
-	peers    map[proto.NodeClient]*proto.Version
-	mempool  *Mempool
-	// TODO: might need a mutex for mempool too
+	peerLock    sync.RWMutex
+	peers       map[proto.NodeClient]*proto.Version
+	mempool     *Mempool
+	chain       *Chain
+	validators  *ValidatorSet
+	proposeLock sync.Mutex
+	seenBlocks  map[string]bool
+	seenLock    sync.RWMutex
 
 	proto.UnimplementedNodeServer
 }
 
-func NewNode(cfg ServerConfig) *Node {
+func NewNode(cfg ServerConfig, chain *Chain, validators *ValidatorSet) *Node {
 	return &Node{
 		logger:       slog.Default(),
 		peers:        make(map[proto.NodeClient]*proto.Version),
 		mempool:      NewMempool(),
+		chain:        chain,
+		validators:   validators,
+		seenBlocks:   make(map[string]bool),
 		ServerConfig: cfg,
 	}
 }
@@ -113,16 +116,13 @@ func (n *Node) addPeer(c proto.NodeClient, v *proto.Version) {
 	n.peerLock.Lock()
 	defer n.peerLock.Unlock()
 
-	// TODO: handle the logic where we decide if we accept/drop the con
-	// ..
-
 	n.peers[c] = v
 
 	if len(v.PeerList) > 0 {
 		go n.bootstrapNetwork(v.PeerList)
 	}
 
-	n.log("new peer successfuly connected", "height", v.Height, "addr", v.ListenAddr)
+	n.log("new peer successfully connected", "height", v.Height, "addr", v.ListenAddr)
 }
 
 func (n *Node) deletePeer(c proto.NodeClient) {
@@ -141,13 +141,16 @@ func (n *Node) Start(bootstrapNodes []string) error {
 	proto.RegisterNodeServer(grpcServer, n)
 	n.log("Starting node")
 
-	// bootstrap the network with a list of already known nodes
 	if len(bootstrapNodes) > 0 {
 		go n.bootstrapNetwork(bootstrapNodes)
 	}
 
 	if n.PrivateKey != nil {
-		go n.validatorLoop()
+		// Wait for network to settle, then check if we should propose
+		go func() {
+			time.Sleep(2 * time.Second)
+			n.maybeProposeBlock()
+		}()
 	}
 
 	return grpcServer.Serve(ln)
@@ -182,15 +185,102 @@ func (n *Node) Handshake(ctx context.Context, v *proto.Version) (*proto.Version,
 	return n.getVersion(), nil
 }
 
-func (n *Node) validatorLoop() {
-	n.log("starting validator loop", "pubKey", n.PrivateKey.Public(), "blocktime", blockTime)
-	ticker := time.NewTicker(blockTime)
-	for {
-		<-ticker.C
+// maybeProposeBlock checks if it's our turn to propose the next block.
+// If yes, creates the block, adds it to our chain, and broadcasts it.
+func (n *Node) maybeProposeBlock() {
+	n.proposeLock.Lock()
+	defer n.proposeLock.Unlock()
 
-		txx := n.mempool.Clear()
-		n.log("time to create a new block", "lenTx", len(txx))
+	height := int32(n.chain.Height() + 1)
+	proposer := n.validators.GetProposer(height)
+
+	if proposer.String() != n.PrivateKey.Public().String() {
+		return
 	}
+
+	txx := n.mempool.Clear()
+	n.log("time to create a new block", "height", height, "lenTx", len(txx))
+
+	block, err := n.createBlock(height, txx)
+	if err != nil {
+		n.log("failed to create block", "err", err)
+		return
+	}
+
+	if err := n.chain.AddBlock(block); err != nil {
+		n.log("failed to add block to local chain", "err", err)
+		return
+	}
+
+	blockHash := hex.EncodeToString(types.HashBlock(block))
+	n.seenLock.Lock()
+	n.seenBlocks[blockHash] = true
+	n.seenLock.Unlock()
+
+	n.log("block created", "height", height, "hash", blockHash)
+
+	go func() {
+		if err := n.broadcast(block); err != nil {
+			n.log("broadcast block failed", "err", err)
+		}
+	}()
+}
+
+func (n *Node) createBlock(height int32, txx []*proto.Transaction) (*proto.Block, error) {
+	currentBlock, err := n.chain.GetBlockByHeight(n.chain.Height())
+	if err != nil {
+		return nil, fmt.Errorf("failed to get current block: %w", err)
+	}
+
+	prevHash := types.HashBlock(currentBlock)
+
+	header := &proto.Header{
+		Version:   1,
+		Height:    height,
+		PrevHash:  prevHash,
+		Timestamp: time.Now().UnixNano(),
+	}
+
+	block := &proto.Block{
+		Header:       header,
+		Transactions: txx,
+	}
+
+	types.SignBlock(*n.PrivateKey, block)
+
+	return block, nil
+}
+
+func (n *Node) HandleBlock(ctx context.Context, block *proto.Block) (*emptypb.Empty, error) {
+	peer, _ := peer.FromContext(ctx)
+	hash := hex.EncodeToString(types.HashBlock(block))
+
+	n.seenLock.Lock()
+	if n.seenBlocks[hash] {
+		n.seenLock.Unlock()
+		return &emptypb.Empty{}, nil
+	}
+	n.seenBlocks[hash] = true
+	n.seenLock.Unlock()
+
+	if err := n.chain.AddBlock(block); err != nil {
+		n.log("block validation failed", "from", peer.Addr, "hash", hash, "height", block.Header.Height, "err", err)
+		return nil, err
+	}
+
+	n.log("block accepted", "from", peer.Addr, "hash", hash, "height", block.Header.Height, "chainHeight", n.chain.Height())
+
+	// After accepting a block, check if we should propose the next one
+	go n.maybeProposeBlock()
+
+	// Re-broadcast to peers who haven't seen it
+	go func() {
+		if err := n.broadcast(block); err != nil {
+			n.log("rebroadcast block failed", "err", err)
+		}
+	}()
+
+	return &emptypb.Empty{}, nil
 }
 
 func (n *Node) broadcast(msg any) error {
@@ -201,6 +291,11 @@ func (n *Node) broadcast(msg any) error {
 			if err != nil {
 				return err
 			}
+		case *proto.Block:
+			_, err := peer.HandleBlock(context.Background(), v)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -208,12 +303,18 @@ func (n *Node) broadcast(msg any) error {
 }
 
 func (n *Node) getVersion() *proto.Version {
-	return &proto.Version{
+	v := &proto.Version{
 		Version:    n.Version,
-		Height:     n.height,
+		Height:     int32(n.chain.Height()),
 		ListenAddr: n.ListenAddr,
 		PeerList:   n.getPeerList(),
 	}
+
+	for _, pk := range n.validators.validators {
+		v.Validators = append(v.Validators, pk.Bytes())
+	}
+
+	return v
 }
 
 func (n *Node) getPeerList() []string {

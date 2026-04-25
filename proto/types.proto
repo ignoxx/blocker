@@ -7,6 +7,7 @@ import "google/protobuf/empty.proto";
 service Node {
   rpc Handshake(Version) returns (Version);
   rpc HandleTransaction(Transaction) returns (google.protobuf.Empty);
+  rpc HandleBlock(Block) returns (google.protobuf.Empty);
 }
 
 message Version {
@@ -14,6 +15,7 @@ message Version {
   int32 height = 2;
   string listenAddr = 3;
   repeated string peerList = 4;
+  repeated bytes validators = 5;
 }
 
 message Block {

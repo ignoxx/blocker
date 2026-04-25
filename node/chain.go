@@ -34,13 +34,10 @@ func (list *HeaderList) Get(index int) *proto.Header {
 	return list.headers[index]
 }
 
-// len = count of headers in the list
-// height = index of the header in the list
 func (list *HeaderList) Len() int {
 	return len(list.headers)
 }
 
-// there will be always be a header at height 0, which is the genesis header/block
 func (list *HeaderList) Height() int {
 	return len(list.headers) - 1
 }
@@ -57,17 +54,18 @@ type Chain struct {
 	blockStore BlockStorer
 	utxoStore  UTXOStorer
 	headers    *HeaderList
+	validators *ValidatorSet
 }
 
-func NewChain(bs BlockStorer, txStore TxStorer) *Chain {
+func NewChain(bs BlockStorer, txStore TxStorer, validators *ValidatorSet) *Chain {
 	chain := &Chain{
 		txStore:    txStore,
 		blockStore: bs,
 		utxoStore:  NewUTXOStore(),
 		headers:    NewHeaderList(),
+		validators: validators,
 	}
 
-	// TODO: just for testing
 	chain.addBlock(createGenesisBlock())
 	return chain
 }
@@ -140,7 +138,6 @@ func (c *Chain) GetBlockByHeight(height int) (*proto.Block, error) {
 }
 
 func (c *Chain) ValidateBlock(b *proto.Block) error {
-	// validate the signature of the block
 	if !types.VerifyBlock(b) {
 		return fmt.Errorf("invalid block: signature verification failed")
 	}
@@ -150,7 +147,16 @@ func (c *Chain) ValidateBlock(b *proto.Block) error {
 		return fmt.Errorf("invalid block: expected height %d, got %d", expectedHeight, b.Header.Height)
 	}
 
-	// validate if the prevHash is the actually hash of the current block
+	signerPubKey := crypto.PublicKeyFromBytes(b.PublicKey)
+	if !c.validators.Has(&signerPubKey) {
+		return fmt.Errorf("invalid block: signer is not a validator")
+	}
+
+	expectedProposer := c.validators.GetProposer(b.Header.Height)
+	if signerPubKey.String() != expectedProposer.String() {
+		return fmt.Errorf("invalid block: wrong proposer at height %d", b.Header.Height)
+	}
+
 	currentBlock, err := c.GetBlockByHeight(c.Height())
 	if err != nil {
 		return err
@@ -171,20 +177,14 @@ func (c *Chain) ValidateBlock(b *proto.Block) error {
 }
 
 func (c *Chain) ValidateTransaction(tx *proto.Transaction) error {
-	// Verify sig
 	if !types.VerifyTransaction(tx) {
 		return fmt.Errorf("invalid block: transaction signature verification failed")
 	}
 
-	// check if all the outputs are unspent
-
-	nInputs := len(tx.Inputs)
-	hash := hex.EncodeToString(types.HashTransaction(tx))
 	sumInputs := 0
 
-	for i := range nInputs {
-		prevHash := hex.EncodeToString(tx.Inputs[i].PrevTxHash)
-		key := fmt.Sprintf("%s:%d", prevHash, i)
+	for i := range tx.Inputs {
+		key := fmt.Sprintf("%s:%d", hex.EncodeToString(tx.Inputs[i].PrevTxHash), tx.Inputs[i].PrevOutIndex)
 		utxo, err := c.utxoStore.Get(key)
 		if err != nil {
 			return fmt.Errorf("invalid block: %w", err)
@@ -192,7 +192,7 @@ func (c *Chain) ValidateTransaction(tx *proto.Transaction) error {
 		sumInputs += int(utxo.Amount)
 
 		if utxo.Spent {
-			return fmt.Errorf("invalid block: transaction input %s:%d is already spent", hash, i)
+			return fmt.Errorf("invalid block: transaction input %d is already spent", i)
 		}
 	}
 
