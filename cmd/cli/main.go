@@ -80,10 +80,12 @@ func createWallet() {
 
 	addr := privKey.Public().Address()
 
+	seed := privKey.String()[:64]
+
 	fmt.Println("=== New Wallet ===")
-	fmt.Println("Private Key:", privKey.String())
-	fmt.Println("Public Key: ", privKey.Public().String())
-	fmt.Println("Address:    ", addr.String())
+	fmt.Println("Private Key (seed):", seed)
+	fmt.Println("Public Key:        ", privKey.Public().String())
+	fmt.Println("Address:           ", addr.String())
 	fmt.Println()
 	fmt.Println("Save your private key — it cannot be recovered!")
 }
