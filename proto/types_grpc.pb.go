@@ -23,6 +23,9 @@ const (
 	Node_Handshake_FullMethodName         = "/Node/Handshake"
 	Node_HandleTransaction_FullMethodName = "/Node/HandleTransaction"
 	Node_HandleBlock_FullMethodName       = "/Node/HandleBlock"
+	Node_GetBalance_FullMethodName        = "/Node/GetBalance"
+	Node_GetTransactions_FullMethodName   = "/Node/GetTransactions"
+	Node_GetUTXOs_FullMethodName          = "/Node/GetUTXOs"
 )
 
 // NodeClient is the client API for Node service.
@@ -32,6 +35,9 @@ type NodeClient interface {
 	Handshake(ctx context.Context, in *Version, opts ...grpc.CallOption) (*Version, error)
 	HandleTransaction(ctx context.Context, in *Transaction, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	HandleBlock(ctx context.Context, in *Block, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	GetBalance(ctx context.Context, in *GetBalanceRequest, opts ...grpc.CallOption) (*GetBalanceResponse, error)
+	GetTransactions(ctx context.Context, in *GetTransactionsRequest, opts ...grpc.CallOption) (*GetTransactionsResponse, error)
+	GetUTXOs(ctx context.Context, in *GetUTXOsRequest, opts ...grpc.CallOption) (*GetUTXOsResponse, error)
 }
 
 type nodeClient struct {
@@ -72,6 +78,36 @@ func (c *nodeClient) HandleBlock(ctx context.Context, in *Block, opts ...grpc.Ca
 	return out, nil
 }
 
+func (c *nodeClient) GetBalance(ctx context.Context, in *GetBalanceRequest, opts ...grpc.CallOption) (*GetBalanceResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetBalanceResponse)
+	err := c.cc.Invoke(ctx, Node_GetBalance_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nodeClient) GetTransactions(ctx context.Context, in *GetTransactionsRequest, opts ...grpc.CallOption) (*GetTransactionsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetTransactionsResponse)
+	err := c.cc.Invoke(ctx, Node_GetTransactions_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *nodeClient) GetUTXOs(ctx context.Context, in *GetUTXOsRequest, opts ...grpc.CallOption) (*GetUTXOsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetUTXOsResponse)
+	err := c.cc.Invoke(ctx, Node_GetUTXOs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // NodeServer is the server API for Node service.
 // All implementations must embed UnimplementedNodeServer
 // for forward compatibility.
@@ -79,6 +115,9 @@ type NodeServer interface {
 	Handshake(context.Context, *Version) (*Version, error)
 	HandleTransaction(context.Context, *Transaction) (*emptypb.Empty, error)
 	HandleBlock(context.Context, *Block) (*emptypb.Empty, error)
+	GetBalance(context.Context, *GetBalanceRequest) (*GetBalanceResponse, error)
+	GetTransactions(context.Context, *GetTransactionsRequest) (*GetTransactionsResponse, error)
+	GetUTXOs(context.Context, *GetUTXOsRequest) (*GetUTXOsResponse, error)
 	mustEmbedUnimplementedNodeServer()
 }
 
@@ -97,6 +136,15 @@ func (UnimplementedNodeServer) HandleTransaction(context.Context, *Transaction) 
 }
 func (UnimplementedNodeServer) HandleBlock(context.Context, *Block) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method HandleBlock not implemented")
+}
+func (UnimplementedNodeServer) GetBalance(context.Context, *GetBalanceRequest) (*GetBalanceResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetBalance not implemented")
+}
+func (UnimplementedNodeServer) GetTransactions(context.Context, *GetTransactionsRequest) (*GetTransactionsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetTransactions not implemented")
+}
+func (UnimplementedNodeServer) GetUTXOs(context.Context, *GetUTXOsRequest) (*GetUTXOsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetUTXOs not implemented")
 }
 func (UnimplementedNodeServer) mustEmbedUnimplementedNodeServer() {}
 func (UnimplementedNodeServer) testEmbeddedByValue()              {}
@@ -173,6 +221,60 @@ func _Node_HandleBlock_Handler(srv interface{}, ctx context.Context, dec func(in
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Node_GetBalance_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetBalanceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NodeServer).GetBalance(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Node_GetBalance_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NodeServer).GetBalance(ctx, req.(*GetBalanceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Node_GetTransactions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetTransactionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NodeServer).GetTransactions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Node_GetTransactions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NodeServer).GetTransactions(ctx, req.(*GetTransactionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Node_GetUTXOs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetUTXOsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(NodeServer).GetUTXOs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Node_GetUTXOs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(NodeServer).GetUTXOs(ctx, req.(*GetUTXOsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Node_ServiceDesc is the grpc.ServiceDesc for Node service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -191,6 +293,18 @@ var Node_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "HandleBlock",
 			Handler:    _Node_HandleBlock_Handler,
+		},
+		{
+			MethodName: "GetBalance",
+			Handler:    _Node_GetBalance_Handler,
+		},
+		{
+			MethodName: "GetTransactions",
+			Handler:    _Node_GetTransactions_Handler,
+		},
+		{
+			MethodName: "GetUTXOs",
+			Handler:    _Node_GetUTXOs_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

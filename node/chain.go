@@ -43,10 +43,11 @@ func (list *HeaderList) Height() int {
 }
 
 type UTXO struct {
-	Hash   string
-	Index  int
-	Amount int64
-	Spent  bool
+	Hash    string
+	Index   int
+	Amount  int64
+	Address string
+	Spent   bool
 }
 
 type Chain struct {
@@ -94,10 +95,11 @@ func (c *Chain) addBlock(b *proto.Block) error {
 		hash := hex.EncodeToString(types.HashTransaction(tx))
 		for i, output := range tx.Outputs {
 			utxo := &UTXO{
-				Hash:   hash,
-				Index:  i,
-				Amount: output.Amount,
-				Spent:  false,
+				Hash:    hash,
+				Index:   i,
+				Amount:  output.Amount,
+				Address: hex.EncodeToString(output.Address),
+				Spent:   false,
 			}
 
 			if err := c.utxoStore.Put(utxo); err != nil {
@@ -135,6 +137,51 @@ func (c *Chain) GetBlockByHeight(height int) (*proto.Block, error) {
 	header := c.headers.Get(height)
 	hash := types.HashHeader(header)
 	return c.GetBlockByHash(hash)
+}
+
+func (c *Chain) GetBalance(address string) int64 {
+	var balance int64
+	for _, utxo := range c.utxoStore.List() {
+		if utxo.Address == address && !utxo.Spent {
+			balance += utxo.Amount
+		}
+	}
+	return balance
+}
+
+func (c *Chain) GetUTXOs(address string) []*UTXO {
+	var result []*UTXO
+	for _, utxo := range c.utxoStore.List() {
+		if utxo.Address == address && !utxo.Spent {
+			result = append(result, utxo)
+		}
+	}
+	return result
+}
+
+func (c *Chain) GetTransactions(address string) []*proto.Transaction {
+	var result []*proto.Transaction
+	for _, tx := range c.txStore.List() {
+		related := false
+		for _, in := range tx.Inputs {
+			if hex.EncodeToString(in.PublicKey) == address {
+				related = true
+				break
+			}
+		}
+		if !related {
+			for _, out := range tx.Outputs {
+				if hex.EncodeToString(out.Address) == address {
+					related = true
+					break
+				}
+			}
+		}
+		if related {
+			result = append(result, tx)
+		}
+	}
+	return result
 }
 
 func (c *Chain) ValidateBlock(b *proto.Block) error {

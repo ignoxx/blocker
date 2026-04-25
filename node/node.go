@@ -167,6 +167,8 @@ func (n *Node) HandleTransaction(ctx context.Context, tx *proto.Transaction) (*e
 				n.log("broadcast failed", "err", err)
 			}
 		}()
+		// A new tx arrived — maybe it's our turn to propose the next block
+		go n.maybeProposeBlock()
 	}
 
 	return &emptypb.Empty{}, nil
@@ -199,6 +201,10 @@ func (n *Node) maybeProposeBlock() {
 	}
 
 	txx := n.mempool.Clear()
+	if len(txx) == 0 {
+		return
+	}
+
 	n.log("time to create a new block", "height", height, "lenTx", len(txx))
 
 	block, err := n.createBlock(height, txx)
@@ -281,6 +287,33 @@ func (n *Node) HandleBlock(ctx context.Context, block *proto.Block) (*emptypb.Em
 	}()
 
 	return &emptypb.Empty{}, nil
+}
+
+func (n *Node) GetBalance(ctx context.Context, req *proto.GetBalanceRequest) (*proto.GetBalanceResponse, error) {
+	addr := hex.EncodeToString(req.Address)
+	balance := n.chain.GetBalance(addr)
+	return &proto.GetBalanceResponse{Balance: balance}, nil
+}
+
+func (n *Node) GetTransactions(ctx context.Context, req *proto.GetTransactionsRequest) (*proto.GetTransactionsResponse, error) {
+	addr := hex.EncodeToString(req.Address)
+	txx := n.chain.GetTransactions(addr)
+	return &proto.GetTransactionsResponse{Transactions: txx}, nil
+}
+
+func (n *Node) GetUTXOs(ctx context.Context, req *proto.GetUTXOsRequest) (*proto.GetUTXOsResponse, error) {
+	addr := hex.EncodeToString(req.Address)
+	utxos := n.chain.GetUTXOs(addr)
+
+	var resp []*proto.UTXO
+	for _, u := range utxos {
+		resp = append(resp, &proto.UTXO{
+			Hash:   u.Hash,
+			Index:  int32(u.Index),
+			Amount: u.Amount,
+		})
+	}
+	return &proto.GetUTXOsResponse{Utxos: resp}, nil
 }
 
 func (n *Node) broadcast(msg any) error {

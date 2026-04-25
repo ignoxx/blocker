@@ -8,6 +8,39 @@ service Node {
   rpc Handshake(Version) returns (Version);
   rpc HandleTransaction(Transaction) returns (google.protobuf.Empty);
   rpc HandleBlock(Block) returns (google.protobuf.Empty);
+  rpc GetBalance(GetBalanceRequest) returns (GetBalanceResponse);
+  rpc GetTransactions(GetTransactionsRequest) returns (GetTransactionsResponse);
+  rpc GetUTXOs(GetUTXOsRequest) returns (GetUTXOsResponse);
+}
+
+message GetBalanceRequest {
+  bytes address = 1;
+}
+
+message GetBalanceResponse {
+  int64 balance = 1;
+}
+
+message GetTransactionsRequest {
+  bytes address = 1;
+}
+
+message GetTransactionsResponse {
+  repeated Transaction transactions = 1;
+}
+
+message GetUTXOsRequest {
+  bytes address = 1;
+}
+
+message UTXO {
+  string hash = 1;
+  int32 index = 2;
+  int64 amount = 3;
+}
+
+message GetUTXOsResponse {
+  repeated UTXO utxos = 1;
 }
 
 message Version {

@@ -1,6 +1,9 @@
 run:
 	@go run cmd/main.go
 
+cli:
+	@go run cmd/cli/main.go @
+
 test:
 	@go test -count=1 ./...
 

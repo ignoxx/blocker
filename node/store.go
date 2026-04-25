@@ -14,6 +14,7 @@ var _ BlockStorer = (*MemoryBlockStore)(nil)
 type UTXOStorer interface {
 	Put(*UTXO) error
 	Get(string) (*UTXO, error)
+	List() []*UTXO
 }
 
 type UTXOStore struct {
@@ -47,9 +48,21 @@ func (s *UTXOStore) Get(key string) (*UTXO, error) {
 	return utxo, nil
 }
 
+func (s *UTXOStore) List() []*UTXO {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	list := make([]*UTXO, 0, len(s.data))
+	for _, v := range s.data {
+		list = append(list, v)
+	}
+	return list
+}
+
 type TxStorer interface {
 	Put(*proto.Transaction) error
 	Get(string) (*proto.Transaction, error)
+	List() []*proto.Transaction
 }
 
 type MemoryTxStore struct {
@@ -80,6 +93,17 @@ func (s *MemoryTxStore) Get(hash string) (*proto.Transaction, error) {
 	}
 
 	return tx, nil
+}
+
+func (s *MemoryTxStore) List() []*proto.Transaction {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	list := make([]*proto.Transaction, 0, len(s.txx))
+	for _, v := range s.txx {
+		list = append(list, v)
+	}
+	return list
 }
 
 type BlockStorer interface {
